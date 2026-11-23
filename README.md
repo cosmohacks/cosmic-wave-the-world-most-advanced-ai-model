@@ -4,7 +4,7 @@ Cosmo is an early multilingual AI chat MVP built with Next.js. It can connect to
 
 ## Run on your computer
 
-You need Node.js 20 or newer and an API key from at least one supported provider.
+You need Node.js 20.9 or newer and an API key from at least one supported provider.
 
 ```bash
 npm install
@@ -29,9 +29,9 @@ ANTHROPIC_API_KEY=
 
 Optional model overrides are shown in `.env.example`. The default model names may change or become unavailable; check your provider's current model documentation if a provider returns an error.
 
-## Deploy a preview
+## Deploy to Vercel
 
-Import the repository into Vercel (or another Next.js host), configure the provider key(s) as encrypted server-side environment variables, and deploy. Use a preview deployment for testing. Before a public production launch, add and verify authentication, persistent storage, rate limits and spending limits, monitoring, privacy/retention policies, and a real web-search integration for current events. API provider keys and usage incur charges.
+Import the repository into Vercel and use the default Next.js framework preset and `npm run build` command. In **Project → Settings → Environment Variables**, add `GEMINI_API_KEY` (or another provider key) for the Production environment. Do not add a `NEXT_PUBLIC_` prefix. Redeploy after setting or changing environment variables. The app requires Node.js 20.9 or newer; set the Vercel Node.js Version to 20.x or newer in project settings if needed.
 
 ## Checks
 
