@@ -54,10 +54,9 @@ export default function Home() {
     }
   }
 
-  function submit(event: FormEvent) {
-    event.preventEvent?.();
+  function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    send();
+    void send();
   }
 
   return (
@@ -71,7 +70,7 @@ export default function Home() {
         </select>
       </header>
 
-      <section className={messages.length ? "conversation active" : "conversation"}>
+      <section className={messages.length ? "conversation active" : "conversation"} aria-live="polite">
         {messages.length === 0 ? (
           <div className="welcome">
             <div className="hero-orb"><span /></div>
@@ -79,7 +78,7 @@ export default function Home() {
             <p>Ask Cosmo in your language. Explore science, culture, news, ideas, and the world around you.</p>
             <div className="suggestions">
               {suggestions.map((suggestion) => (
-                <button key={suggestion} onClick={()Selector(suggestion)}>{suggestion}</button>
+                <button key={suggestion} type="button" onClick={() => void send(suggestion)}>{suggestion}</button>
               ))}
             </div>
           </div>
@@ -87,11 +86,11 @@ export default function Home() {
           <div className="messages">
             {messages.map((message, index) => (
               <article key={index} className={message.role}>
-                <span className="avatar">{message.role === "assistant" ? "C" : "Y"}</span>
+                <span className="avatar" aria-hidden="true">{message.role === "assistant" ? "C" : "Y"}</span>
                 <div>{message.content}</div>
               </article>
             ))}
-            {loading && <article className="assistant"><span className="avatar">C</span><div className="typing"><i /><i /><i /></div></article>}
+            {loading && <article className="assistant"><span className="avatar">C</span><div className="typing" aria-label="Cosmo is thinking"><i /><i /><i /></div></article>}
             <div ref={endRef} />
           </div>
         )}
@@ -103,6 +102,7 @@ export default function Home() {
           onChange={(event) => setInput(event.target.value)}
           placeholder="Ask anything in any language..."
           aria-label="Message Cosmo"
+          maxLength={4000}
         />
         <button type="submit" disabled={!input.trim() || loading} aria-label="Send">↗</button>
       </form>

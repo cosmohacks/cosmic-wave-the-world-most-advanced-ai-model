@@ -5,6 +5,7 @@ Respond in the user's language unless they request another language.
 Give accurate, useful, balanced answers across every subject.
 State uncertainty clearly, avoid invented facts, and cite sources when current information is requested.
 Be friendly, concise, and natural. Do not claim to be human or to possess capabilities you do not have.`;
+const requestTimeoutMs = 30_000;
 
 export async function generateChatAnswer(
   message: string,
@@ -21,31 +22,35 @@ function preferredLanguage(language?: string) {
   return language ? ` Preferred response language: ${language}.` : "";
 }
 
+const fetchOptions = { signal: AbortSignal.timeout(requestTimeoutMs) };
+
 async function generateOpenAI(message: string, history: ChatMessage[], language?: string): Promise<ChatResponse> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY is not configured");
 
   const messages = [
     { role: "system", content: SYSTEM_PROMPT + preferredLanguage(language) },
-    ...history.slice(-12).map((item) => ({ role: item.role, content: item.content })),
+    ...history.map((item) => ({ role: item.role, content: item.content })),
     { role: "user", content: message },
   ];
-
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    ...fetchOptions,
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({ model: process.env.OPENAI_MODEL || "gpt-4o-mini", messages }),
   });
-  if (!response.ok) throw new Error(`OpenAI request failed: ${await response.text()}`);
+  if (!response.ok) throw new Error(`OpenAI returned HTTP ${response.status}`);
   const data = await response.json();
-  return { answer: data.choices[0].message.content, provider: "openai" };
+  const answer = data.choices?.[0]?.message?.content;
+  if (typeof answer !== "string" || !answer) throw new Error("OpenAI returned an empty response");
+  return { answer, provider: "openai" };
 }
 
 async function generateGemini(message: string, history: ChatMessage[], language?: string): Promise<ChatResponse> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
 
-  const contents = history.slice(-12).map((item) => ({
+  const contents = history.map((item) => ({
     role: item.role === "assistant" ? "model" : "user",
     parts: [{ text: item.content }],
   }));
@@ -55,6 +60,7 @@ async function generateGemini(message: string, history: ChatMessage[], language?
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
+      ...fetchOptions,
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -63,9 +69,11 @@ async function generateGemini(message: string, history: ChatMessage[], language?
       }),
     }
   );
-  if (!response.ok) throw new Error(`Gemini request failed: ${await response.text()}`);
+  if (!response.ok) throw new Error(`Gemini returned HTTP ${response.status}`);
   const data = await response.json();
-  return { answer: data.candidates[0].content.parts.map((part: { text?: string }) => part.text || "").join(""), provider: "gemini" };
+  const answer = data.candidates?.[0]?.content?.parts?.map((part: { text?: string }) => part.text || "").join("");
+  if (typeof answer !== "string" || !answer) throw new Error("Gemini returned an empty response");
+  return { answer, provider: "gemini" };
 }
 
 async function generateAnthropic(message: string, history: ChatMessage[], language?: string): Promise<ChatResponse> {
@@ -73,6 +81,7 @@ async function generateAnthropic(message: string, history: ChatMessage[], langua
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured");
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
+    ...fetchOptions,
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -83,11 +92,12 @@ async function generateAnthropic(message: string, history: ChatMessage[], langua
       model: process.env.ANTHROPIC_MODEL || "claude-3-5-haiku-latest",
       max_tokens: 1200,
       system: SYSTEM_PROMPT + preferredLanguage(language),
-      messages: [...history.slice(-12), { role: "user", content: message }],
+      messages: [...history, { role: "user", content: message }],
     }),
   });
-  if (!response.ok) throw new Error(`Anthropic request failed: ${await response.text()}`);
+  if (!response.ok) throw new Error(`Anthropic returned HTTP ${response.status}`);
   const data = await response.json();
-  const answer = data.content.map((block: { text?: string }) => block.text || "").join("");
+  const answer = data.content?.map((block: { text?: string }) => block.text || "").join("");
+  if (typeof answer !== "string" || !answer) throw new Error("Anthropic returned an empty response");
   return { answer, provider: "anthropic" };
 }
