@@ -17,21 +17,17 @@ Open `.env.local`, add one or more API keys, and save it. Never commit `.env.loc
 npm run dev
 ```
 
-Visit `http://localhost:3000` on your computer. To try it from another device on the same Wi-Fi, run `npm run dev -- --hostname 0.0.0.0` and open `http://YOUR-COMPUTER-LAN-IP:3000` on that device. Do not expose this development server to the public internet.
+Visit `http://localhost:3000`. To try it from another device on the same Wi-Fi, run `npm run dev -- --hostname 0.0.0.0` and visit `http://YOUR-COMPUTER-LAN-IP:3000` on that device. Do not expose this development server to the public internet.
 
-## Provider keys
+## Gemini 4 setup
 
-```dotenv
-OPENAI_API_KEY=
-GEMINI_API_KEY=
-ANTHROPIC_API_KEY=
-```
+Cosmo sends Gemini requests to Google's Interactions API, which is the API surface for Gemini 4 Neon/Hydrogen; these models are not called through the older `generateContent` URL. The default model is `gemini-4-neon`. To use Hydrogen, set `GEMINI_MODEL=gemini-4-hydrogen` in `.env.local` or in Vercel.
 
-Optional model overrides are shown in `.env.example`. The default model names may change or become unavailable; check your provider's current model documentation if a provider returns an error.
+Create an API key in Google AI Studio and make sure the selected Google Cloud project has the Gemini API enabled and the API access/quota/billing required for that model. A Google AI Pro subscription for the Gemini app does not itself guarantee Gemini API access, quota, or billing. Keep the key server-side as `GEMINI_API_KEY`; do not use a `NEXT_PUBLIC_` prefix. In Vercel, add it (and optionally `GEMINI_MODEL`) for Production and redeploy after changes.
 
 ## Deploy to Vercel
 
-Import the repository into Vercel and use the default Next.js framework preset and `npm run build` command. In **Project → Settings → Environment Variables**, add `GEMINI_API_KEY` (or another provider key) for the Production environment. Do not add a `NEXT_PUBLIC_` prefix. Redeploy after setting or changing environment variables. The app requires Node.js 20.9 or newer; set the Vercel Node.js Version to 20.x or newer in project settings if needed.
+Import the repository into Vercel and use the default Next.js framework preset and `npm run build` command. The app requires Node.js 20.9 or newer; set the Vercel Node.js version to 20.x or newer if needed.
 
 ## Checks
 
@@ -42,4 +38,4 @@ npm run build
 
 ## Chat API
 
-`POST /api/chat` accepts a JSON body with `message`, optional `provider` (`openai`, `gemini`, or `anthropic`), optional browser `language`, and up to 12 prior messages. Requests are validated and provider calls have a timeout.
+`POST /api/chat` accepts `message`, optional `provider` (`openai`, `gemini`, or `anthropic`), optional browser `language`, and up to 12 prior messages. Requests are validated and provider calls have a timeout.

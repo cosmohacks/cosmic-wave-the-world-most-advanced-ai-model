@@ -34,7 +34,6 @@ function languageHint(language?: string) {
 }
 
 function requestOptions(): RequestInit {
-  // Create a fresh timeout for every request; a module-level signal expires permanently.
   return { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS), cache: "no-store" };
 }
 
@@ -44,15 +43,15 @@ async function providerError(response: Response, provider: string): Promise<Prov
     const body = await response.json();
     providerMessage = body?.error?.message || body?.error?.status || "";
   } catch {
-    // Provider response wasn't JSON; use status-based guidance below.
+    // Use status-based guidance if the provider didn't return JSON.
   }
   console.error(`${provider} request failed`, { status: response.status, message: providerMessage.slice(0, 500) });
 
   if (provider === "Gemini") {
-    if (response.status === 400) return new ProviderError("Gemini rejected the request. Check that GEMINI_MODEL is a model available to your API key (default: gemini-2.5-flash).", 502);
-    if (response.status === 401 || response.status === 403) return new ProviderError("Gemini rejected the API key. Verify GEMINI_API_KEY in Vercel, check API-key restrictions, and confirm the Gemini API is enabled for its Google Cloud project.", 502);
-    if (response.status === 404) return new ProviderError("The configured Gemini model was not found or is unavailable. Set GEMINI_MODEL to a model enabled for your API key (for example, gemini-2.5-flash).", 502);
-    if (response.status === 429) return new ProviderError("Gemini quota or rate limit exceeded. Check your Google AI Studio usage, billing, and rate limits.", 503);
+    if (response.status === 401 || response.status === 403) return new ProviderError("Google rejected the Gemini API request. Google AI Pro for the Gemini app does not necessarily include Gemini API quota; check that this API key is from Google AI Studio, the Gemini API is enabled, and API billing/access is active for its project.", 502);
+    if (response.status === 404) return new ProviderError("Google could not find or allow this Gemini model through the API. Confirm the exact model ID is available to this API key in Google AI Studio. Gemini 4 models use the Interactions API, not generateContent.", 502);
+    if (response.status === 400) return new ProviderError("Gemini rejected the Interactions API request. Check the model ID and Google AI Studio API access for this project.", 502);
+    if (response.status === 429) return new ProviderError("Gemini API quota or rate limit exceeded. Check API usage, billing, and limits in Google AI Studio or its linked Cloud project. The Gemini app subscription is separate from API quota.", 503);
   }
   if (response.status >= 500) return new ProviderError(`${provider} is temporarily unavailable. Please try again shortly.`, 503);
   return new ProviderError(`${provider} rejected the request (HTTP ${response.status}). Check its API key, model setting, and account access.`, 502);
@@ -85,32 +84,26 @@ async function generateGemini(message: string, history: ChatMessage[], language?
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) throw new ProviderError("GEMINI_API_KEY is not configured in the hosting environment. Add it to the Vercel Production environment and redeploy.", 503);
 
-  const model = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
-  const contents = history.map((item) => ({
-    role: item.role === "assistant" ? "model" : "user",
-    parts: [{ text: item.content }],
-  }));
-  contents.push({ role: "user", parts: [{ text: message }] });
-
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-    {
-      ...requestOptions(),
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM_PROMPT + languageHint(language) }] },
-        contents,
-      }),
-    }
-  );
+  // Gemini 4 Neon/Hydrogen are called through Interactions, not generateContent.
+  const model = process.env.GEMINI_MODEL?.trim() || "gemini-4-neon";
+  const transcript = history.map((turn) => `${turn.role === "assistant" ? "Cosmo" : "User"}: ${turn.content}`).join("\n\n");
+  const input = [transcript, `User: ${message}`].filter(Boolean).join("\n\n");
+  const response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
+    ...requestOptions(),
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+    body: JSON.stringify({
+      model,
+      input,
+      system_instruction: SYSTEM_PROMPT + languageHint(language),
+    }),
+  });
   if (!response.ok) throw await providerError(response, "Gemini");
   const data = await response.json();
-  const answer = data.candidates?.[0]?.content?.parts?.map((part: { text?: string }) => part.text || "").join("");
-  if (typeof answer !== "string" || !answer) {
-    const reason = data.promptFeedback?.blockReason;
-    throw new ProviderError(reason ? `Gemini blocked this prompt (${reason}). Try rephrasing it.` : "Gemini returned no text. Please retry with a different prompt.", 502);
-  }
+  const answer = typeof data.output_text === "string"
+    ? data.output_text
+    : data.output?.map((item: { content?: Array<{ text?: string }> }) => item.content?.map((part) => part.text || "").join("") || "").join("");
+  if (typeof answer !== "string" || !answer) throw new ProviderError("Gemini returned no text. Check the model's API availability and try again.", 502);
   return { answer, provider: "gemini" };
 }
 
