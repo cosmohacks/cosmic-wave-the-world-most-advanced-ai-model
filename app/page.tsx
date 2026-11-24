@@ -14,12 +14,20 @@ export default function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [provider, setProvider] = useState<ProviderName>("openai");
+  const [provider, setProvider] = useState<ProviderName>("gemini");
+  const [configuredProviders, setConfiguredProviders] = useState<ProviderName[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
+
+  useEffect(() => {
+    fetch("/api/chat")
+      .then((response) => response.json())
+      .then((data) => setConfiguredProviders(data.configuredProviders || []))
+      .catch(() => setConfiguredProviders([]));
+  }, []);
 
   async function send(text = input) {
     const message = text.trim();
@@ -34,12 +42,7 @@ export default function Home() {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message,
-          history,
-          provider,
-          language: navigator.language,
-        }),
+        body: JSON.stringify({ message, history, provider, language: navigator.language }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Cosmo could not respond");
@@ -63,11 +66,16 @@ export default function Home() {
     <main className="shell">
       <header>
         <div className="brand"><span className="orb" /> <strong>COSMO</strong></div>
-        <select value={provider} onChange={(event) => setProvider(event.target.value as ProviderName)} aria-label="AI provider">
-          <option value="openai">OpenAI</option>
-          <option value="gemini">Gemini</option>
-          <option value="anthropic">Claude</option>
-        </select>
+        <div className="provider-control">
+          <span className={configuredProviders.includes(provider) ? "provider-status ready" : "provider-status"}>
+            {configuredProviders.includes(provider) ? "API ready" : "Key not detected"}
+          </span>
+          <select value={provider} onChange={(event) => setProvider(event.target.value as ProviderName)} aria-label="AI provider">
+            <option value="openai">OpenAI</option>
+            <option value="gemini">Gemini</option>
+            <option value="anthropic">Claude</option>
+          </select>
+        </div>
       </header>
 
       <section className={messages.length ? "conversation active" : "conversation"} aria-live="polite">
@@ -97,13 +105,7 @@ export default function Home() {
       </section>
 
       <form onSubmit={submit}>
-        <input
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          placeholder="Ask anything in any language..."
-          aria-label="Message Cosmo"
-          maxLength={4000}
-        />
+        <input value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ask anything in any language..." aria-label="Message Cosmo" maxLength={4000} />
         <button type="submit" disabled={!input.trim() || loading} aria-label="Send">↗</button>
       </form>
       <footer>Cosmo can make mistakes. Verify important information.</footer>
